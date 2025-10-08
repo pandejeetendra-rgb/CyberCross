@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cyber Drop – Falling Objects Quiz</title>
+  <style>
+    :root{
+      --bg:#0b1220; --panel:#ffffff; --ink:#1b1f2a; --muted:#6b7280; --accent:#2f7afe; --good:#12b981; --bad:#ef4444;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:#fff;font:500 16px/1.5 "Segoe UI",Roboto,system-ui,Arial,sans-serif}
+    .wrap{max-width:960px;margin:0 auto;padding:16px}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    h1{font-size:20px;margin:0}
+    .hud{display:flex;gap:8px;flex-wrap:wrap}
+    .chip{background:#0f172a;border:1px solid #1f2a44;border-radius:999px;padding:6px 10px;color:#d1d5db}
+    .panel{background:var(--panel);color:var(--ink);border-radius:14px;border:1px solid #e5e7eb;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    .grid{display:grid;grid-template-columns:1fr;gap:14px}
+    @media(min-width:900px){.grid{grid-template-columns:minmax(360px,1fr) 320px}}
+    .body{padding:12px}
+
+    #stageWrap{display:flex;flex-direction:column;align-items:center}
+    #game{background:#0f172a;border:2px solid #1f2a44;border-radius:12px;touch-action:none}
+    .controls{display:flex;gap:10px;margin:10px 0}
+    .controls button{background:#12223f;color:#e5e7eb;border:1px solid #1f2a44;border-radius:12px;padding:12px 16px;min-width:80px;font-weight:700}
+    .controls button:active{transform:scale(.98)}
+
+    .sb h3{margin:8px 0}
+    .row{display:flex;justify-content:space-between;gap:8px;margin:6px 0;color:#374151}
+    .row strong{color:#111827}
+    .btn{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 12px;cursor:pointer}
+    .btn.secondary{background:#edf2fe;color:#0b3abf;border:1px solid #cfe0ff}
+    .list{background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:8px;max-height:260px;overflow:auto}
+    .list table{width:100%;border-collapse:collapse;font-size:14px}
+    .list th,.list td{padding:6px;border-bottom:1px solid #eef2f7;text-align:left}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>🛡️ Cyber Drop</h1>
+      <div class="hud">
+        <div class="chip">⭐ Score: <span id="score">0</span></div>
+        <div class="chip">⏱ <span id="timer">00:00</span></div>
+        <div class="chip">🔄 Q: <span id="qnum">0</span>/10</div>
+      </div>
+    </header>
+
+    <section class="grid">
+      <div class="panel">
+        <div class="body" id="stageWrap">
+          <canvas id="game" width="640" height="480" aria-label="Cyber Drop game area"></canvas>
+          <div class="controls">
+            <button id="leftBtn" aria-label="Move left">◀︎ Left</button>
+            <button id="catchBtn" aria-label="Catch">Catch</button>
+            <button id="rightBtn" aria-label="Move right">Right ▶︎</button>
+          </div>
+          <div style="text-align:center;color:#93c5fd">Tap left/right or use ◀ ▶ keys. Catch the correct answer box.</div>
+        </div>
+      </div>
+
+      <aside class="panel sb">
+        <div class="body">
+          <h3>Current Question</h3>
+          <div id="qbox" class="row" style="display:block; background:#f1f5f9; padding:10px; border-radius:10px; min-height:80px"></div>
+          <div class="row"><strong>Options fall as boxes:</strong> A, B, C, D</div>
+          <div class="row" style="gap:6px">
+            <button class="btn" id="startBtn">Start Stage</button>
+            <button class="btn secondary" id="restartBtn">Restart</button>
+            <button class="btn secondary" id="submitBtn">Submit Score</button>
+          </div>
+          <h3 style="margin-top:14px">🏆 Leaderboard (Top 10)</h3>
+          <div class="list">
+            <table>
+              <thead><tr><th>Name</th><th>Score</th><th>Time(s)</th></tr></thead>
+              <tbody id="boardBody"><tr><td colspan="3">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </aside>
+    </section>
+  </div>
+
+  <script>
+  const ENDPOINT = "https://script.google.com/macros/s/AKfycbxbYSzhsxmadZwawvEDr8ea37Z0n1VLD6SbTYV7QhAp4bVQojhoQe_ZIoHYbL4yZEZ57g/exec";
+  const ACTION_GET_QUESTIONS = ENDPOINT + "?action=get_questions";
+  const ACTION_GET_BOARD = ENDPOINT + "?action=get_leaderboard";
+
+  const FALLBACK = [
+    {q:"Which prevents unauthorized access to a network?", A:"Firewall", B:"Phishing", C:"Worm", D:"Spyware", correct:"A"},
+    {q:"Encrypts data for privacy over the internet?", A:"VPN", B:"Adware", C:"Cookie", D:"WPA2", correct:"A"},
+    {q:"Malicious program that replicates itself?", A:"Proxy", B:"Worm", C:"Patch", D:"Backup", correct:"B"},
+    {q:"Strong password property?", A:"Short & common", B:"Includes name", C:"Mixed characters", D:"Only digits", correct:"C"},
+    {q:"Two-factor authentication adds…", A:"New username", B:"Second verification step", C:"Faster login", D:"Nothing", correct:"B"},
+    {q:"Email tricking you to click a fake link?", A:"Phishing", B:"Hashing", C:"Router", D:"DoS", correct:"A"},
+    {q:"Convert plaintext to ciphertext", A:"Encrypt", B:"Compress", C:"Format", D:"Upload", correct:"A"},
+    {q:"Public Wi-Fi best practice?", A:"Disable firewall", B:"Use VPN", C:"Share password", D:"Ignore updates", correct:"B"},
+    {q:"Software that shows unwanted ads", A:"Adware", B:"Worm", C:"Botnet", D:"TLS", correct:"A"},
+    {q:"Keeps systems up to date", A:"Exploit", B:"Patch", C:"Sniff", D:"Spam", correct:"B"}
+  ];
+
+  const $ = s => document.querySelector(s);
+  const canvas = $('#game');
+  const ctx = canvas.getContext('2d');
+  const qbox = $('#qbox');
+  const scoreEl = $('#score');
+  const timerEl = $('#timer');
+  const qnumEl = $('#qnum');
+
+  let questions = [];
+  let current = 0;
+  let score = 0;
+  let startTs = 0;
+  let timerId = null;
+  const world = { w: canvas.width, h: canvas.height };
+  const basket = { x: canvas.width/2, y: canvas.height-30, w: 120, h: 18, speed: 9 };
+  let boxes = [];
+  const boxW = 120, boxH = 40;
+  let running = false;
+
+  function formatTime(s){ const m=Math.floor(s/60); const ss=String(s%60).padStart(2,'0'); return `${String(m).padStart(2,'0')}:${ss}` }
+
+  async function loadQuestions(){
+    try{
+      const res = await fetch(ACTION_GET_QUESTIONS);
+      const json = await res.json();
+      const rows = json.rows || json || [];
+      const pool = rows.map(r=>({
+        q: r.q || r.question || '',
+        A: r.A || r.a, B: r.B || r.b, C: r.C || r.c, D: r.D || r.d,
+        correct: (r.correct || '').toString().trim().toUpperCase()
+      })).filter(x=>x.q && x.A && x.B && x.C && x.D && /^[ABCD]$/.test(x.correct));
+      if(pool.length>=10){ questions = shuffle(pool).slice(0,10); }
+      else { questions = FALLBACK.slice(0,10); }
+    }catch(e){ questions = FALLBACK.slice(0,10); }
+  }
+
+  function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]] } return a }
+
+  async function startStage(){
+    await loadQuestions();
+    current = 0; score = 0; startTs = Date.now(); updateHud();
+    running = true; clearInterval(timerId); timerId = setInterval(()=>{
+      const secs = Math.floor((Date.now()-startTs)/1000); timerEl.textContent = formatTime(secs);
+    }, 250);
+    nextQuestion(); loop();
+  }
+
+  function endStage(){
+    running = false; clearInterval(timerId);
+    const secs = Math.floor((Date.now()-startTs)/1000);
+    alert(`Stage complete!\nScore: ${score}\nTime: ${secs}s`);
+  }
+
+  function updateHud(){ scoreEl.textContent = score; qnumEl.textContent = current; }
+
+  function nextQuestion(){
+    if(current>=10){ endStage(); return }
+    const q = questions[current];
+    qbox.innerHTML = `<strong>Q${current+1}.</strong> ${escapeHtml(q.q)}`;
+    spawnBoxes(q);
+    current++; updateHud();
+  }
+
+  function spawnBoxes(q){
+    boxes = [];
+    const labels = ['A','B','C','D'];
+    const xs = shuffle([80, 220, 360, 500]);
+    labels.forEach((lab, i)=>{
+      boxes.push({
+        x: xs[i]-boxW/2,
+        y: - (40 + i*60),
+        w: boxW,
+        h: boxH,
+        vy: 2.5 + Math.min(3, Math.floor(current/3))*0.6,
+        label: lab,
+        text: q[lab],
+        hit: false,
+        correct: (lab === q.correct)
+      })
+    })
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,world.w,world.h);
+    ctx.fillStyle = '#0f172a'; ctx.fillRect(0,0,world.w,world.h);
+    ctx.fillStyle = '#0b3a7e'; ctx.fillRect(0,0,world.w,48);
+    ctx.fillStyle = '#e5efff'; ctx.font = 'bold 16px Segoe UI'; ctx.fillText('Catch the correct answer', 16, 30);
+
+    boxes.forEach(b=>{
+      ctx.fillStyle = '#12223f';
+      ctx.strokeStyle = b.correct ? '#22c55e' : '#94a3b8';
+      ctx.lineWidth = 2;
+      roundRect(ctx, b.x, b.y, b.w, b.h, 10, true, true);
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = 'bold 14px Segoe UI';
+      ctx.fillText(`${b.label}) ${truncate(b.text, 18)}`, b.x+10, b.y+25);
+    });
+
+    ctx.fillStyle = '#1d4ed8';
+    roundRect(ctx, basket.x-basket.w/2, basket.y-basket.h/2, basket.w, basket.h, 10, true, false);
+  }
+
+  function truncate(s, n){ s = String(s||''); return s.length>n ? s.slice(0,n-1)+'…' : s }
+  function roundRect(ctx, x, y, w, h, r, fill, stroke){ if(r>w/2)r=w/2;if(r>h/2)r=h/2;ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);if(fill)ctx.fill();if(stroke)ctx.stroke(); }
+
+  function loop(){ if(!running) return; update(); draw(); requestAnimationFrame(loop); }
+
+  function update(){
+    boxes.forEach(b=>{
+      b.y += b.vy;
+      if(!b.hit && rectsOverlap(b, {x:basket.x-basket.w/2, y:basket.y-basket.h/2, w:basket.w, h:basket.h})){
+        b.hit = true;
+        if(b.correct){ score += 10; feedback('Correct +10', true) } else { score -= 5; feedback('Wrong -5', false) }
+        setTimeout(nextQuestion, 300);
+      }
+    });
+    const correctBox = boxes.find(b=>b.correct);
+    if(correctBox && correctBox.y > world.h + 10){ feedback('Missed (0)', false); setTimeout(nextQuestion, 300); }
+    basket.x = Math.max(basket.w/2, Math.min(world.w - basket.w/2, basket.x));
+    scoreEl.textContent = score;
+  }
+
+  function rectsOverlap(a,b){ return !(a.x+a.w<b.x||a.x>b.x+b.w||a.y+a.h<b.y||a.y>b.y+b.h); }
+  function feedback(msg, good){ ctx.save();ctx.fillStyle=good?'rgba(16,185,129,.18)':'rgba(239,68,68,.18)';ctx.fillRect(0,48,world.w,32);ctx.fillStyle=good?'#34d399':'#f87171';ctx.font='bold 14px Segoe UI';ctx.fillText(msg,16,70);ctx.restore(); }
+
+  document.addEventListener('keydown', e=>{ if(e.key==='ArrowLeft') basket.x -= basket.speed; if(e.key==='ArrowRight') basket.x += basket.speed; });
+  $('#leftBtn').addEventListener('touchstart', ()=> moveHold(-1));
+  $('#rightBtn').addEventListener('touchstart', ()=> moveHold(1));
+  $('#leftBtn').addEventListener('touchend', stopHold);
+  $('#rightBtn').addEventListener('touchend', stopHold);
+  $('#leftBtn').addEventListener('mousedown', ()=> moveHold(-1));
+  $('#rightBtn').addEventListener('mousedown', ()=> moveHold(1));
+  document.addEventListener('mouseup', stopHold);
+  let holdId=null;
+  function moveHold(dir){ if(holdId) return; holdId=setInterval(()=>{ basket.x += dir*basket.speed; }, 16) }
+  function stopHold(){ clearInterval(holdId); holdId=null }
+
+  $('#startBtn').onclick = startStage;
+  $('#restartBtn').onclick = ()=>{ running=false; clearInterval(timerId); startStage(); };
+  $('#submitBtn').onclick = submitScore;
+
+  async function fetchLeaderboard(){
+    try{
+      const res = await fetch(ACTION_GET_BOARD);
+      const json = await res.json();
+      const rows = (json.rows||[]).slice(0,10);
+      const body = $('#boardBody'); body.innerHTML='';
+      if(!rows.length){ body.innerHTML='<tr><td colspan="3">No scores yet.</td></tr>'; return }
+      rows.forEach(r=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${escapeHtml(r.player||'')}</td><td>${r.score??''}</td><td>${r.seconds??''}</td>`;
+        body.appendChild(tr);
+      });
+    }catch(err){ $('#boardBody').innerHTML='<tr><td colspan="3">Could not
